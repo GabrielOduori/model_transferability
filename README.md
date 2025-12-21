@@ -24,6 +24,7 @@ This project implements three probabilistic transfer learning paradigms:
 | OBTL | ✅ Complete | Covariance structure transfer (theoretical framework) |
 | DPTR | ✅ Complete | VAE-based feature alignment for sensor adaptation |
 | GAM-SSM-LUR Transfer | ✅ Complete | LUR coefficient + SSM dynamics transfer |
+| FusionSVGP Transfer | ✅ Complete | Multi-source GP kernel + inducing point transfer |
 | GP Models | ✅ Complete | Baseline and spatial-temporal GPs |
 | Evaluation Metrics | ✅ Complete | KL divergence, PICP, RMSE, calibration |
 | Demo Experiments | ✅ Complete | All transfer methods with synthetic data |
@@ -33,6 +34,7 @@ This project implements three probabilistic transfer learning paradigms:
 
 - **GPyTorch Gaussian Process**: Spatial-temporal air quality prediction with uncertainty quantification
 - **GAM-SSM-LUR**: Hybrid Generalized Additive Model–State Space Model with Land Use Regression (requires [gam_ssm_lur](https://github.com/GabrielOduori/gam_ssm_lur))
+- **FusionSVGP**: Multi-source Sparse Variational GP for sensor fusion (requires [fusionGP2](https://github.com/GabrielOduori/fusionGP2))
 
 ## Project Structure
 
@@ -96,6 +98,9 @@ python -m experiments.demo_dptr
 
 # GAM-SSM-LUR transfer (requires gam_ssm_lur package)
 python -m experiments.demo_gam_ssm_lur_transfer
+
+# FusionSVGP transfer (requires fusiongp package)
+python -m experiments.demo_fusion_gp_transfer
 ```
 
 Results are saved to `results/figures/`.
