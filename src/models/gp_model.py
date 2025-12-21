@@ -217,13 +217,13 @@ def sample_posterior(
             os_sample = np.exp(
                 np.log(outputscale) + np.random.normal(0, 0.1)
             )
-            sample.append([os_sample])
+            sample.append(np.atleast_1d(os_sample).flatten())
 
         if sample_noise:
             noise_sample = np.exp(
                 np.log(noise) + np.random.normal(0, 0.1)
             )
-            sample.append([noise_sample])
+            sample.append(np.atleast_1d(noise_sample).flatten())
 
         samples.append(np.concatenate(sample))
 

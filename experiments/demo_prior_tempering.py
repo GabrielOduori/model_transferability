@@ -243,7 +243,9 @@ def run_experiment(beta_values=[0.0, 0.3, 0.5, 0.7, 1.0], save_results=True):
     fig = create_visualizations(results, data)
 
     if save_results:
-        output_dir = Path('../results/figures')
+        # Get project root directory (parent of experiments/)
+        project_root = Path(__file__).parent.parent
+        output_dir = project_root / 'results' / 'figures'
         output_dir.mkdir(parents=True, exist_ok=True)
         fig.savefig(output_dir / 'prior_tempering_results.png', dpi=300, bbox_inches='tight')
         print(f"   ✓ Saved to {output_dir / 'prior_tempering_results.png'}")

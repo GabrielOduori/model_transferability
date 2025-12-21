@@ -61,3 +61,6 @@ Thumbs.db
 
 # Other repos
 tlbook-code/
+
+# Documentation (conversation logs - not for GitHub)
+docs/SETUP_CONVERSATION.md
