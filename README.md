@@ -23,15 +23,16 @@ This project implements three probabilistic transfer learning paradigms:
 | Prior Tempering | ✅ Complete | Hyperparameter transfer with β tempering |
 | OBTL | ✅ Complete | Covariance structure transfer (theoretical framework) |
 | DPTR | ✅ Complete | VAE-based feature alignment for sensor adaptation |
+| GAM-SSM-LUR Transfer | ✅ Complete | LUR coefficient + SSM dynamics transfer |
 | GP Models | ✅ Complete | Baseline and spatial-temporal GPs |
 | Evaluation Metrics | ✅ Complete | KL divergence, PICP, RMSE, calibration |
-| Demo Experiments | ✅ Complete | All three methods with synthetic data |
+| Demo Experiments | ✅ Complete | All transfer methods with synthetic data |
 | Real Data Integration | 🔄 In Progress | Awaiting Dublin model data |
 
 ## Models
 
 - **GPyTorch Gaussian Process**: Spatial-temporal air quality prediction with uncertainty quantification
-- **GAL-SSM-LUR**: Geographically Adaptive LASSO State Space Model with Land Use Regression
+- **GAM-SSM-LUR**: Hybrid Generalized Additive Model–State Space Model with Land Use Regression (requires [gam_ssm_lur](https://github.com/GabrielOduori/gam_ssm_lur))
 
 ## Project Structure
 
@@ -92,6 +93,9 @@ python -m experiments.demo_obtl
 
 # DPTR demo (RQ2: Sensor adaptation with feature mismatch)
 python -m experiments.demo_dptr
+
+# GAM-SSM-LUR transfer (requires gam_ssm_lur package)
+python -m experiments.demo_gam_ssm_lur_transfer
 ```
 
 Results are saved to `results/figures/`.
