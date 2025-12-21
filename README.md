@@ -14,7 +14,7 @@ This project implements three probabilistic transfer learning paradigms:
 
 1. **Bayesian Prior Transfer with Tempering** ✅ - Adaptive knowledge transfer using temperature parameter β
 2. **Optimal Bayesian Transfer Learning (OBTL)** ✅ - Joint Wishart priors for covariance structure transfer
-3. **Deep Probabilistic Transfer Regression (DPTR)** 🔄 - VAE-based domain adaptation for missing data scenarios
+3. **Deep Probabilistic Transfer Regression (DPTR)** ✅ - VAE-based domain adaptation for missing data scenarios
 
 ## Implementation Status
 
@@ -22,10 +22,10 @@ This project implements three probabilistic transfer learning paradigms:
 |-----------|--------|-------------|
 | Prior Tempering | ✅ Complete | Hyperparameter transfer with β tempering |
 | OBTL | ✅ Complete | Covariance structure transfer (theoretical framework) |
-| DPTR | ⚠️ Pending | VAE-based feature alignment |
+| DPTR | ✅ Complete | VAE-based feature alignment for sensor adaptation |
 | GP Models | ✅ Complete | Baseline and spatial-temporal GPs |
 | Evaluation Metrics | ✅ Complete | KL divergence, PICP, RMSE, calibration |
-| Demo Experiments | ✅ Complete | Synthetic data demonstrations |
+| Demo Experiments | ✅ Complete | All three methods with synthetic data |
 | Real Data Integration | 🔄 In Progress | Awaiting Dublin model data |
 
 ## Models
@@ -84,11 +84,14 @@ pip install -r requirements.txt
 ### Run Demo Experiments
 
 ```bash
-# Prior Tempering demo
+# Prior Tempering demo (RQ1: Hyperparameter transfer)
 python -m experiments.demo_prior_tempering
 
-# OBTL demo
+# OBTL demo (RQ1: Covariance structure transfer)
 python -m experiments.demo_obtl
+
+# DPTR demo (RQ2: Sensor adaptation with feature mismatch)
+python -m experiments.demo_dptr
 ```
 
 Results are saved to `results/figures/`.
