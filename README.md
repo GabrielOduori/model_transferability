@@ -12,9 +12,21 @@ This repository implements transfer learning methods for air quality models acro
 
 This project implements three probabilistic transfer learning paradigms:
 
-1. **Bayesian Prior Transfer with Tempering** - Adaptive knowledge transfer using temperature parameter β
-2. **Optimal Bayesian Transfer Learning (OBTL)** - Joint Wishart priors for covariance structure transfer
-3. **Deep Probabilistic Transfer Regression (DPTR)** - VAE-based domain adaptation for missing data scenarios
+1. **Bayesian Prior Transfer with Tempering** ✅ - Adaptive knowledge transfer using temperature parameter β
+2. **Optimal Bayesian Transfer Learning (OBTL)** ✅ - Joint Wishart priors for covariance structure transfer
+3. **Deep Probabilistic Transfer Regression (DPTR)** 🔄 - VAE-based domain adaptation for missing data scenarios
+
+## Implementation Status
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| Prior Tempering | ✅ Complete | Hyperparameter transfer with β tempering |
+| OBTL | ✅ Complete | Covariance structure transfer (theoretical framework) |
+| DPTR | ⚠️ Pending | VAE-based feature alignment |
+| GP Models | ✅ Complete | Baseline and spatial-temporal GPs |
+| Evaluation Metrics | ✅ Complete | KL divergence, PICP, RMSE, calibration |
+| Demo Experiments | ✅ Complete | Synthetic data demonstrations |
+| Real Data Integration | 🔄 In Progress | Awaiting Dublin model data |
 
 ## Models
 
@@ -68,6 +80,18 @@ pip install -r requirements.txt
 ```
 
 ## Quick Start
+
+### Run Demo Experiments
+
+```bash
+# Prior Tempering demo
+python -m experiments.demo_prior_tempering
+
+# OBTL demo
+python -m experiments.demo_obtl
+```
+
+Results are saved to `results/figures/`.
 
 ### 1. Baseline (No Transfer)
 ```python
