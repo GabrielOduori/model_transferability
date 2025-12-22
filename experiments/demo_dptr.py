@@ -168,11 +168,22 @@ def run_experiment(latent_dims=[5, 10, 15], save_results=True):
     fig = create_visualizations(results, data)
 
     if save_results:
+        from datetime import datetime
+
         project_root = Path(__file__).parent.parent
         output_dir = project_root / 'results' / 'figures'
         output_dir.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_dir / 'dptr_results.png', dpi=300, bbox_inches='tight')
-        print(f"   ✓ Saved to {output_dir / 'dptr_results.png'}")
+
+        # Create timestamped filename to avoid overwriting
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f'dptr_results_{timestamp}.png'
+
+        # Also save as "latest" for easy access
+        fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
+        fig.savefig(output_dir / 'dptr_results_latest.png', dpi=300, bbox_inches='tight')
+
+        print(f"   ✓ Saved to {output_dir / filename}")
+        print(f"   ✓ Also saved as dptr_results_latest.png")
 
     print("\n" + "=" * 70)
     print("EXPERIMENT COMPLETE")

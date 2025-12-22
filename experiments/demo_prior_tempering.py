@@ -246,12 +246,23 @@ def run_experiment(beta_values=[0.0, 0.3, 0.5, 0.7, 1.0], save_results=True):
     fig = create_visualizations(results, data)
 
     if save_results:
+        from datetime import datetime
+
         # Get project root directory (parent of experiments/)
         project_root = Path(__file__).parent.parent
         output_dir = project_root / 'results' / 'figures'
         output_dir.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_dir / 'prior_tempering_results.png', dpi=300, bbox_inches='tight')
-        print(f"   ✓ Saved to {output_dir / 'prior_tempering_results.png'}")
+
+        # Create timestamped filename to avoid overwriting
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f'prior_tempering_results_{timestamp}.png'
+
+        # Also save as "latest" for easy access
+        fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
+        fig.savefig(output_dir / 'prior_tempering_results_latest.png', dpi=300, bbox_inches='tight')
+
+        print(f"   ✓ Saved to {output_dir / filename}")
+        print(f"   ✓ Also saved as prior_tempering_results_latest.png")
 
     plt.show()
 
