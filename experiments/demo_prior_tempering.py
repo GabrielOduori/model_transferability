@@ -9,12 +9,15 @@ Usage:
 """
 
 import sys
-sys.path.append('..')
+from pathlib import Path
+
+# Add project root to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from pathlib import Path
 
 # Import our modules
 from src.models.gp_model import BaselineGP, train_baseline_gp, predict_with_uncertainty, sample_posterior
