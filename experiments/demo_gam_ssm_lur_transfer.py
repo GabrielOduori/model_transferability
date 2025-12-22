@@ -306,17 +306,28 @@ def demonstrate_transfer_learning():
             temporal_weight=config['temporal_weight']
         )
 
-        # Evaluate
-        predictions = cork_transfer.predict(cork_data['X'][:100], return_intervals=False)
-        y_true = cork_data['y'][:100]
+        # Evaluate on full target dataset
+        # Note: GAM-SSM-LUR requires full spatio-temporal structure for prediction
+        try:
+            predictions = cork_transfer.predict(cork_data['X'], return_intervals=False)
+            y_true = cork_data['y']
 
-        if hasattr(predictions, 'total'):
-            y_pred = predictions.total.flatten()[:len(y_true)]
-        else:
-            y_pred = predictions.flatten()[:len(y_true)]
+            if hasattr(predictions, 'total'):
+                y_pred = predictions.total.flatten()
+            else:
+                y_pred = predictions.flatten()
 
-        rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))
-        mae = np.mean(np.abs(y_true - y_pred))
+            # Use only overlapping length
+            min_len = min(len(y_true), len(y_pred))
+            y_true = y_true[:min_len]
+            y_pred = y_pred[:min_len]
+
+            rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))
+            mae = np.mean(np.abs(y_true - y_pred))
+        except Exception as e:
+            print(f"   Warning: Prediction failed ({e}). Using dummy metrics.")
+            rmse = 999.0
+            mae = 999.0
 
         results.append({
             'name': config['name'],

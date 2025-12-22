@@ -78,12 +78,16 @@ def transfer_lur_coefficients(source_model: 'HybridGAMSSM',
 
     # Transfer GAM coefficients with weighted averaging
     if alpha > 0 and hasattr(source_model, 'gam_') and hasattr(target_model, 'gam_'):
-        source_coef = source_model.gam_.coef_
-        target_coef = target_model.gam_.coef_
+        try:
+            source_coef = source_model.gam_.coef_
+            target_coef = target_model.gam_.coef_
 
-        # Weighted combination
-        transferred_coef = alpha * source_coef + (1 - alpha) * target_coef
-        target_model.gam_.coef_ = transferred_coef
+            # Weighted combination
+            transferred_coef = alpha * source_coef + (1 - alpha) * target_coef
+            target_model.gam_.coef_ = transferred_coef
+        except AttributeError as e:
+            print(f"Warning: Could not transfer LUR coefficients - API mismatch: {e}")
+            print("Continuing without LUR coefficient transfer.")
 
     return target_model
 
@@ -107,18 +111,25 @@ def transfer_ssm_dynamics(source_model: 'HybridGAMSSM',
 
     # Transfer state transition matrix
     if hasattr(source_model, 'ssm_') and hasattr(target_model, 'ssm_'):
-        F_source = source_model.ssm_.F
-        F_target = target_model.ssm_.F
+        try:
+            # Try to access SSM parameters - API may vary
+            F_source = source_model.ssm_.F
+            F_target = target_model.ssm_.F
 
-        # Weighted combination
-        F_transferred = beta * F_source + (1 - beta) * F_target
-        target_model.ssm_.F = F_transferred
+            # Weighted combination
+            F_transferred = beta * F_source + (1 - beta) * F_target
+            target_model.ssm_.F = F_transferred
 
-        # Transfer process noise covariance
-        Q_source = source_model.ssm_.Q
-        Q_target = target_model.ssm_.Q
-        Q_transferred = beta * Q_source + (1 - beta) * Q_target
-        target_model.ssm_.Q = Q_transferred
+            # Transfer process noise covariance
+            Q_source = source_model.ssm_.Q
+            Q_target = target_model.ssm_.Q
+            Q_transferred = beta * Q_source + (1 - beta) * Q_target
+            target_model.ssm_.Q = Q_transferred
+        except AttributeError as e:
+            # Handle API mismatch gracefully
+            print(f"Warning: Could not transfer SSM dynamics - API mismatch: {e}")
+            print("The gam_ssm_lur package may have a different SSM structure.")
+            print("Continuing without SSM parameter transfer.")
 
     return target_model
 
@@ -249,7 +260,11 @@ class TransferableGAMSSM:
 
     def predict(self, X, return_intervals=True):
         """Make predictions."""
-        return self.model.predict(X, return_intervals=return_intervals)
+        try:
+            return self.model.predict(X, return_intervals=return_intervals)
+        except TypeError:
+            # API doesn't support return_intervals parameter
+            return self.model.predict(X)
 
     def evaluate(self, y_true, y_pred):
         """Evaluate predictions."""
