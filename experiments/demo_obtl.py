@@ -9,6 +9,9 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import json
+import csv
+from datetime import datetime
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -20,6 +23,135 @@ from src.transfer_methods.obtl import (
 )
 from src.models.gp_model import predict_with_uncertainty, train_baseline_gp
 from src.evaluation.metrics import regression_metrics
+
+
+def save_metrics_to_file(results, timestamp=None):
+    """
+    Save experiment metrics to JSON, CSV, and LaTeX files.
+
+    Parameters
+    ----------
+    results : dict
+        Results dictionary with metrics for each delta value
+    timestamp : str, optional
+        Timestamp string. If None, current time is used.
+    """
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Get project root directory
+    project_root = Path(__file__).parent.parent
+    metrics_dir = project_root / 'results' / 'metrics'
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+
+    # Prepare metrics for JSON serialization
+    metrics_data = {
+        'timestamp': timestamp,
+        'experiment': 'obtl',
+        'delta_values': [float(d) for d in results['delta']],
+        'metrics': {}
+    }
+
+    # Add metrics for each delta value
+    for i, delta in enumerate(results['delta']):
+        metrics_data['metrics'][str(delta)] = {
+            'rmse': float(results['rmse'][i]),
+            'mae': float(results['mae'][i]),
+            'r2': float(results['r2'][i]),
+            'cov_similarity': float(results['cov_similarity'][i])
+        }
+
+    # Add summary statistics
+    best_idx = np.argmin(results['rmse'])
+    best_delta = results['delta'][best_idx]
+    baseline_rmse = results['rmse'][0]
+    improvement = (baseline_rmse - results['rmse'][best_idx]) / baseline_rmse * 100
+
+    metrics_data['summary'] = {
+        'best_delta': float(best_delta),
+        'best_rmse': float(results['rmse'][best_idx]),
+        'best_mae': float(results['mae'][best_idx]),
+        'best_r2': float(results['r2'][best_idx]),
+        'baseline_rmse': float(baseline_rmse),
+        'improvement_percent': float(improvement)
+    }
+
+    # 1. Save JSON
+    json_filename = f'obtl_metrics_{timestamp}.json'
+    json_filepath = metrics_dir / json_filename
+    with open(json_filepath, 'w') as f:
+        json.dump(metrics_data, f, indent=2)
+
+    latest_json_filepath = metrics_dir / 'obtl_metrics_latest.json'
+    with open(latest_json_filepath, 'w') as f:
+        json.dump(metrics_data, f, indent=2)
+
+    # 2. Save CSV
+    csv_filename = f'obtl_metrics_{timestamp}.csv'
+    csv_filepath = metrics_dir / csv_filename
+
+    with open(csv_filepath, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Delta', 'RMSE', 'MAE', 'R2', 'Cov_Similarity'])
+        for i, delta in enumerate(results['delta']):
+            writer.writerow([
+                delta,
+                f"{results['rmse'][i]:.4f}",
+                f"{results['mae'][i]:.4f}",
+                f"{results['r2'][i]:.4f}",
+                f"{results['cov_similarity'][i]:.4f}"
+            ])
+        # Add summary row
+        writer.writerow([])
+        writer.writerow(['Summary', '', '', '', ''])
+        writer.writerow(['Best Delta', best_delta, '', '', ''])
+        writer.writerow(['Improvement (%)', f"{improvement:.2f}", '', '', ''])
+
+    latest_csv_filepath = metrics_dir / 'obtl_metrics_latest.csv'
+    with open(csv_filepath, 'r') as src, open(latest_csv_filepath, 'w') as dst:
+        dst.write(src.read())
+
+    # 3. Save LaTeX table
+    latex_filename = f'obtl_metrics_{timestamp}.tex'
+    latex_filepath = metrics_dir / latex_filename
+
+    with open(latex_filepath, 'w') as f:
+        f.write("% OBTL Transfer Learning Results\n")
+        f.write(f"% Generated: {timestamp}\n\n")
+        f.write("\\begin{table}[htbp]\n")
+        f.write("\\centering\n")
+        f.write("\\caption{OBTL Transfer Learning Performance}\n")
+        f.write("\\label{tab:obtl_results}\n")
+        f.write("\\begin{tabular}{ccccc}\n")
+        f.write("\\hline\n")
+        f.write("$\\delta$ & RMSE & MAE & $R^2$ & Cov. Sim. \\\\\n")
+        f.write("\\hline\n")
+
+        for i, delta in enumerate(results['delta']):
+            f.write(f"{delta:.1f} & "
+                   f"{results['rmse'][i]:.4f} & "
+                   f"{results['mae'][i]:.4f} & "
+                   f"{results['r2'][i]:.4f} & "
+                   f"{results['cov_similarity'][i]:.4f} \\\\\n")
+
+        f.write("\\hline\n")
+        f.write("\\multicolumn{5}{l}{")
+        f.write(f"Best $\\delta$ = {best_delta:.1f}, "
+               f"Improvement = {improvement:.1f}\\%")
+        f.write("} \\\\\n")
+        f.write("\\hline\n")
+        f.write("\\end{tabular}\n")
+        f.write("\\end{table}\n")
+
+    latest_latex_filepath = metrics_dir / 'obtl_metrics_latest.tex'
+    with open(latex_filepath, 'r') as src, open(latest_latex_filepath, 'w') as dst:
+        dst.write(src.read())
+
+    print(f"   ✓ Saved metrics to:")
+    print(f"      - JSON: {json_filepath.name}")
+    print(f"      - CSV:  {csv_filepath.name}")
+    print(f"      - LaTeX: {latex_filepath.name}")
+    print(f"   ✓ Also saved as 'latest' versions")
 
 
 def generate_synthetic_data(n_source=200, n_target=50, n_test=100, seed=42):
@@ -146,22 +278,25 @@ def run_experiment(delta_values=[0.0, 0.3, 0.5, 0.7, 1.0], save_results=True):
     fig = create_visualizations(results, data, delta_values)
 
     if save_results:
-        from datetime import datetime
-
         project_root = Path(__file__).parent.parent
-        output_dir = project_root / 'results' / 'figures'
-        output_dir.mkdir(parents=True, exist_ok=True)
 
         # Create timestamped filename to avoid overwriting
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Save figures
+        output_dir = project_root / 'results' / 'figures'
+        output_dir.mkdir(parents=True, exist_ok=True)
         filename = f'obtl_results_{timestamp}.png'
 
-        # Also save as "latest" for easy access
         fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
         fig.savefig(output_dir / 'obtl_results_latest.png', dpi=300, bbox_inches='tight')
 
-        print(f"   ✓ Saved to {output_dir / filename}")
+        print(f"   ✓ Saved figures to {output_dir / filename}")
         print(f"   ✓ Also saved as obtl_results_latest.png")
+
+        # Save metrics
+        print("\n4. Saving metrics...")
+        save_metrics_to_file(results, timestamp)
 
     print("\n" + "=" * 70)
     print("EXPERIMENT COMPLETE")

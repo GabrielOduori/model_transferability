@@ -9,12 +9,139 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import json
+import csv
+from datetime import datetime
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.transfer_methods.dptr import train_dptr_gp, predict_dptr
 from src.evaluation.metrics import regression_metrics, time_to_stabilization
+
+
+def save_metrics_to_file(results, timestamp=None):
+    """
+    Save experiment metrics to JSON, CSV, and LaTeX files.
+
+    Parameters
+    ----------
+    results : dict
+        Results dictionary with metrics for each latent dimension
+    timestamp : str, optional
+        Timestamp string. If None, current time is used.
+    """
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Get project root directory
+    project_root = Path(__file__).parent.parent
+    metrics_dir = project_root / 'results' / 'metrics'
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+
+    # Prepare metrics for JSON serialization
+    metrics_data = {
+        'timestamp': timestamp,
+        'experiment': 'dptr',
+        'latent_dims': [int(d) for d in results['latent_dim']],
+        'metrics': {}
+    }
+
+    # Add metrics for each latent dimension
+    for i, latent_dim in enumerate(results['latent_dim']):
+        metrics_data['metrics'][str(latent_dim)] = {
+            'rmse': float(results['rmse'][i]),
+            'mae': float(results['mae'][i]),
+            'r2': float(results['r2'][i]),
+            'stabilization_time': int(results['stabilization_time'][i])
+        }
+
+    # Add summary statistics
+    best_idx = np.argmax(results['r2'])
+    best_latent_dim = results['latent_dim'][best_idx]
+
+    metrics_data['summary'] = {
+        'best_latent_dim': int(best_latent_dim),
+        'best_rmse': float(results['rmse'][best_idx]),
+        'best_mae': float(results['mae'][best_idx]),
+        'best_r2': float(results['r2'][best_idx]),
+        'best_stabilization_time': int(results['stabilization_time'][best_idx])
+    }
+
+    # 1. Save JSON
+    json_filename = f'dptr_metrics_{timestamp}.json'
+    json_filepath = metrics_dir / json_filename
+    with open(json_filepath, 'w') as f:
+        json.dump(metrics_data, f, indent=2)
+
+    latest_json_filepath = metrics_dir / 'dptr_metrics_latest.json'
+    with open(latest_json_filepath, 'w') as f:
+        json.dump(metrics_data, f, indent=2)
+
+    # 2. Save CSV
+    csv_filename = f'dptr_metrics_{timestamp}.csv'
+    csv_filepath = metrics_dir / csv_filename
+
+    with open(csv_filepath, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Latent_Dim', 'RMSE', 'MAE', 'R2', 'Stabilization_Time'])
+        for i, latent_dim in enumerate(results['latent_dim']):
+            writer.writerow([
+                latent_dim,
+                f"{results['rmse'][i]:.4f}",
+                f"{results['mae'][i]:.4f}",
+                f"{results['r2'][i]:.4f}",
+                results['stabilization_time'][i]
+            ])
+        # Add summary row
+        writer.writerow([])
+        writer.writerow(['Summary', '', '', '', ''])
+        writer.writerow(['Best Latent Dim', best_latent_dim, '', '', ''])
+
+    latest_csv_filepath = metrics_dir / 'dptr_metrics_latest.csv'
+    with open(csv_filepath, 'r') as src, open(latest_csv_filepath, 'w') as dst:
+        dst.write(src.read())
+
+    # 3. Save LaTeX table
+    latex_filename = f'dptr_metrics_{timestamp}.tex'
+    latex_filepath = metrics_dir / latex_filename
+
+    with open(latex_filepath, 'w') as f:
+        f.write("% DPTR Transfer Learning Results\n")
+        f.write(f"% Generated: {timestamp}\n\n")
+        f.write("\\begin{table}[htbp]\n")
+        f.write("\\centering\n")
+        f.write("\\caption{DPTR Transfer Learning Performance}\n")
+        f.write("\\label{tab:dptr_results}\n")
+        f.write("\\begin{tabular}{ccccc}\n")
+        f.write("\\hline\n")
+        f.write("Latent Dim & RMSE & MAE & $R^2$ & Stab. Time \\\\\n")
+        f.write("\\hline\n")
+
+        for i, latent_dim in enumerate(results['latent_dim']):
+            f.write(f"{latent_dim} & "
+                   f"{results['rmse'][i]:.4f} & "
+                   f"{results['mae'][i]:.4f} & "
+                   f"{results['r2'][i]:.4f} & "
+                   f"{results['stabilization_time'][i]} \\\\\n")
+
+        f.write("\\hline\n")
+        f.write("\\multicolumn{5}{l}{")
+        f.write(f"Best latent dim = {best_latent_dim}")
+        f.write("} \\\\\n")
+        f.write("\\hline\n")
+        f.write("\\end{tabular}\n")
+        f.write("\\end{table}\n")
+
+    latest_latex_filepath = metrics_dir / 'dptr_metrics_latest.tex'
+    with open(latex_filepath, 'r') as src, open(latest_latex_filepath, 'w') as dst:
+        dst.write(src.read())
+
+    print(f"   ✓ Saved metrics to:")
+    print(f"      - JSON: {json_filepath.name}")
+    print(f"      - CSV:  {csv_filepath.name}")
+    print(f"      - LaTeX: {latex_filepath.name}")
+    print(f"   ✓ Also saved as 'latest' versions")
 
 
 def generate_sensor_data(n_source=200, n_target=50, n_test=100, seed=42):
@@ -168,22 +295,25 @@ def run_experiment(latent_dims=[5, 10, 15], save_results=True):
     fig = create_visualizations(results, data)
 
     if save_results:
-        from datetime import datetime
-
         project_root = Path(__file__).parent.parent
-        output_dir = project_root / 'results' / 'figures'
-        output_dir.mkdir(parents=True, exist_ok=True)
 
         # Create timestamped filename to avoid overwriting
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Save figures
+        output_dir = project_root / 'results' / 'figures'
+        output_dir.mkdir(parents=True, exist_ok=True)
         filename = f'dptr_results_{timestamp}.png'
 
-        # Also save as "latest" for easy access
         fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
         fig.savefig(output_dir / 'dptr_results_latest.png', dpi=300, bbox_inches='tight')
 
-        print(f"   ✓ Saved to {output_dir / filename}")
+        print(f"   ✓ Saved figures to {output_dir / filename}")
         print(f"   ✓ Also saved as dptr_results_latest.png")
+
+        # Save metrics
+        print("\n4. Saving metrics...")
+        save_metrics_to_file(results, timestamp)
 
     print("\n" + "=" * 70)
     print("EXPERIMENT COMPLETE")

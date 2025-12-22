@@ -23,7 +23,15 @@ try:
     from gam_ssm_lur.models.hybrid import HybridGAMSSM, HybridPrediction
     from gam_ssm_lur.models.spatial_gam import SpatialGAM
     from gam_ssm_lur.models.state_space import StateSpaceModel
-    GAM_SSM_AVAILABLE = True
+
+    # Test if pygam is available by trying to import it
+    try:
+        import pygam
+        GAM_SSM_AVAILABLE = True
+    except ImportError:
+        GAM_SSM_AVAILABLE = False
+        print("Warning: pygam not available. Install with: pip install pygam")
+
 except ImportError:
     GAM_SSM_AVAILABLE = False
     print("Warning: gam_ssm_lur not available. Install from github.com/GabrielOduori/gam_ssm_lur")

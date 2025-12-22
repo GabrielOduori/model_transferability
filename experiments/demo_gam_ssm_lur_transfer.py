@@ -10,7 +10,10 @@ Note: This demo requires the gam_ssm_lur package and actual city data.
 
 import numpy as np
 import sys
+import json
+import csv
 from pathlib import Path
+from datetime import datetime
 
 # Add model_transferability to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,16 +29,156 @@ try:
     if not GAM_SSM_AVAILABLE:
         print("⚠️  gam_ssm_lur package not found.")
         print("   Install from: github.com/GabrielOduori/gam_ssm_lur")
+        print("   Required dependencies: pygam, gam_ssm_lur")
         print("   This demo shows the transfer learning API structure.")
-        sys.exit(0)
-
-    from gam_ssm_lur.models.hybrid import HybridGAMSSM
+        GAM_SSM_AVAILABLE = False
+    else:
+        try:
+            from gam_ssm_lur.models.hybrid import HybridGAMSSM
+        except ImportError as inner_e:
+            print(f"⚠️  gam_ssm_lur imports failed: {inner_e}")
+            print("   Install dependencies: pip install pygam")
+            print("   Install from: github.com/GabrielOduori/gam_ssm_lur")
+            GAM_SSM_AVAILABLE = False
 
 except ImportError as e:
-    print(f"Import error: {e}")
-    print("\nThis demo requires the gam_ssm_lur package.")
-    print("Install from: https://github.com/GabrielOduori/gam_ssm_lur")
-    sys.exit(1)
+    print(f"⚠️  Import error: {e}")
+    print("   This demo requires the gam_ssm_lur package.")
+    print("   Install from: https://github.com/GabrielOduori/gam_ssm_lur")
+    print("   Required dependencies: pip install pygam")
+    GAM_SSM_AVAILABLE = False
+
+
+def save_metrics_to_file(results, timestamp=None):
+    """
+    Save experiment metrics to JSON, CSV, and LaTeX files.
+
+    Parameters
+    ----------
+    results : list of dict
+        Results list with metrics for each configuration
+    timestamp : str, optional
+        Timestamp string. If None, current time is used.
+    """
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Get project root directory
+    project_root = Path(__file__).parent.parent
+    metrics_dir = project_root / 'results' / 'metrics'
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+
+    # Prepare metrics for JSON serialization
+    metrics_data = {
+        'timestamp': timestamp,
+        'experiment': 'gam_ssm_lur_transfer',
+        'configurations': [],
+        'metrics': {}
+    }
+
+    # Add metrics for each configuration
+    for result in results:
+        config_name = result['name']
+        metrics_data['configurations'].append(config_name)
+        metrics_data['metrics'][config_name] = {
+            'spatial_weight': float(result['spatial_weight']),
+            'temporal_weight': float(result['temporal_weight']),
+            'rmse': float(result['rmse']),
+            'mae': float(result['mae'])
+        }
+
+    # Add summary statistics
+    best_result = min(results, key=lambda x: x['rmse'])
+    baseline_rmse = results[0]['rmse']
+    improvement = (baseline_rmse - best_result['rmse']) / baseline_rmse * 100
+
+    metrics_data['summary'] = {
+        'best_config': best_result['name'],
+        'best_spatial_weight': float(best_result['spatial_weight']),
+        'best_temporal_weight': float(best_result['temporal_weight']),
+        'best_rmse': float(best_result['rmse']),
+        'best_mae': float(best_result['mae']),
+        'baseline_rmse': float(baseline_rmse),
+        'improvement_percent': float(improvement)
+    }
+
+    # 1. Save JSON
+    json_filename = f'gam_ssm_lur_metrics_{timestamp}.json'
+    json_filepath = metrics_dir / json_filename
+    with open(json_filepath, 'w') as f:
+        json.dump(metrics_data, f, indent=2)
+
+    latest_json_filepath = metrics_dir / 'gam_ssm_lur_metrics_latest.json'
+    with open(latest_json_filepath, 'w') as f:
+        json.dump(metrics_data, f, indent=2)
+
+    # 2. Save CSV
+    csv_filename = f'gam_ssm_lur_metrics_{timestamp}.csv'
+    csv_filepath = metrics_dir / csv_filename
+
+    with open(csv_filepath, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Configuration', 'Spatial_Weight', 'Temporal_Weight', 'RMSE', 'MAE'])
+        for result in results:
+            writer.writerow([
+                result['name'],
+                f"{result['spatial_weight']:.2f}",
+                f"{result['temporal_weight']:.2f}",
+                f"{result['rmse']:.4f}",
+                f"{result['mae']:.4f}"
+            ])
+        # Add summary row
+        writer.writerow([])
+        writer.writerow(['Summary', '', '', '', ''])
+        writer.writerow(['Best Config', best_result['name'], '', '', ''])
+        writer.writerow(['Improvement (%)', f"{improvement:.2f}", '', '', ''])
+
+    latest_csv_filepath = metrics_dir / 'gam_ssm_lur_metrics_latest.csv'
+    with open(csv_filepath, 'r') as src, open(latest_csv_filepath, 'w') as dst:
+        dst.write(src.read())
+
+    # 3. Save LaTeX table
+    latex_filename = f'gam_ssm_lur_metrics_{timestamp}.tex'
+    latex_filepath = metrics_dir / latex_filename
+
+    with open(latex_filepath, 'w') as f:
+        f.write("% GAM-SSM-LUR Transfer Learning Results\n")
+        f.write(f"% Generated: {timestamp}\n\n")
+        f.write("\\begin{table}[htbp]\n")
+        f.write("\\centering\n")
+        f.write("\\caption{GAM-SSM-LUR Transfer Learning Performance}\n")
+        f.write("\\label{tab:gam_ssm_lur_results}\n")
+        f.write("\\begin{tabular}{lcccc}\n")
+        f.write("\\hline\n")
+        f.write("Configuration & $w_s$ & $w_t$ & RMSE & MAE \\\\\n")
+        f.write("\\hline\n")
+
+        for result in results:
+            # Shorten config name for table
+            short_name = result['name'].replace(' transfer', '').replace('No transfer ', '')
+            f.write(f"{short_name:20s} & "
+                   f"{result['spatial_weight']:.1f} & "
+                   f"{result['temporal_weight']:.1f} & "
+                   f"{result['rmse']:.4f} & "
+                   f"{result['mae']:.4f} \\\\\n")
+
+        f.write("\\hline\n")
+        f.write("\\multicolumn{5}{l}{")
+        f.write(f"Best: {best_result['name']}, Improvement = {improvement:.1f}\\%")
+        f.write("} \\\\\n")
+        f.write("\\hline\n")
+        f.write("\\end{tabular}\n")
+        f.write("\\end{table}\n")
+
+    latest_latex_filepath = metrics_dir / 'gam_ssm_lur_metrics_latest.tex'
+    with open(latex_filepath, 'r') as src, open(latest_latex_filepath, 'w') as dst:
+        dst.write(src.read())
+
+    print(f"   ✓ Saved metrics to:")
+    print(f"      - JSON: {json_filepath.name}")
+    print(f"      - CSV:  {csv_filepath.name}")
+    print(f"      - LaTeX: {latex_filepath.name}")
+    print(f"   ✓ Also saved as 'latest' versions")
 
 
 def create_synthetic_city_data(n_locations=20, n_times=100, n_features=10, seed=42):
@@ -200,6 +343,10 @@ def demonstrate_transfer_learning():
     baseline_rmse = results[0]['rmse']
     improvement = (baseline_rmse - best_result['rmse']) / baseline_rmse * 100
     print(f"\nImprovement over baseline: {improvement:.1f}%")
+
+    # Save metrics
+    print("\n5. Saving metrics...")
+    save_metrics_to_file(results)
 
     print("\n" + "=" * 70)
     print("Key Components Transferred:")

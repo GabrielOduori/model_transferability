@@ -18,6 +18,9 @@ sys.path.insert(0, str(project_root))
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import json
+import csv
+from datetime import datetime
 
 # Import our modules
 from src.models.gp_model import BaselineGP, train_baseline_gp, predict_with_uncertainty, sample_posterior
@@ -28,6 +31,143 @@ from src.evaluation.metrics import (
     regression_metrics,
     TransferEvaluator
 )
+
+
+def save_metrics_to_file(results, timestamp=None):
+    """
+    Save experiment metrics to JSON, CSV, and LaTeX files.
+
+    Parameters
+    ----------
+    results : dict
+        Results dictionary with metrics for each beta value
+    timestamp : str, optional
+        Timestamp string. If None, current time is used.
+    """
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Get project root directory
+    project_root = Path(__file__).parent.parent
+    metrics_dir = project_root / 'results' / 'metrics'
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+
+    # Prepare metrics for JSON serialization
+    metrics_data = {
+        'timestamp': timestamp,
+        'experiment': 'prior_tempering',
+        'beta_values': [],
+        'metrics': {}
+    }
+
+    for beta, result in results.items():
+        metrics_data['beta_values'].append(float(beta))
+        metrics_data['metrics'][str(beta)] = {
+            'strategy': result['strategy'],
+            'rmse': float(result['rmse']),
+            'mae': float(result['mae']),
+            'r2': float(result['r2']),
+            'picp': float(result['picp']),
+            'kl_divergence': float(result['kl_divergence'])
+        }
+
+    # Add summary statistics
+    best_beta = min(results.keys(), key=lambda b: results[b]['rmse'])
+    baseline = results[0.0]
+    best_result = results[best_beta]
+    improvement = (baseline['rmse'] - best_result['rmse']) / baseline['rmse'] * 100
+
+    metrics_data['summary'] = {
+        'best_beta': float(best_beta),
+        'best_rmse': float(best_result['rmse']),
+        'best_mae': float(best_result['mae']),
+        'best_r2': float(best_result['r2']),
+        'best_picp': float(best_result['picp']),
+        'baseline_rmse': float(baseline['rmse']),
+        'improvement_percent': float(improvement)
+    }
+
+    # 1. Save JSON
+    json_filename = f'prior_tempering_metrics_{timestamp}.json'
+    json_filepath = metrics_dir / json_filename
+    with open(json_filepath, 'w') as f:
+        json.dump(metrics_data, f, indent=2)
+
+    latest_json_filepath = metrics_dir / 'prior_tempering_metrics_latest.json'
+    with open(latest_json_filepath, 'w') as f:
+        json.dump(metrics_data, f, indent=2)
+
+    # 2. Save CSV
+    csv_filename = f'prior_tempering_metrics_{timestamp}.csv'
+    csv_filepath = metrics_dir / csv_filename
+
+    with open(csv_filepath, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Beta', 'Strategy', 'RMSE', 'MAE', 'R2', 'PICP', 'KL_Divergence'])
+        for beta in sorted(results.keys()):
+            result = results[beta]
+            writer.writerow([
+                beta,
+                result['strategy'],
+                f"{result['rmse']:.4f}",
+                f"{result['mae']:.4f}",
+                f"{result['r2']:.4f}",
+                f"{result['picp']:.4f}",
+                f"{result['kl_divergence']:.4f}"
+            ])
+        # Add summary row
+        writer.writerow([])
+        writer.writerow(['Summary', '', '', '', '', '', ''])
+        writer.writerow(['Best Beta', best_beta, '', '', '', '', ''])
+        writer.writerow(['Improvement (%)', f"{improvement:.2f}", '', '', '', '', ''])
+
+    latest_csv_filepath = metrics_dir / 'prior_tempering_metrics_latest.csv'
+    with open(csv_filepath, 'r') as src, open(latest_csv_filepath, 'w') as dst:
+        dst.write(src.read())
+
+    # 3. Save LaTeX table
+    latex_filename = f'prior_tempering_metrics_{timestamp}.tex'
+    latex_filepath = metrics_dir / latex_filename
+
+    with open(latex_filepath, 'w') as f:
+        f.write("% Prior Tempering Transfer Learning Results\n")
+        f.write(f"% Generated: {timestamp}\n\n")
+        f.write("\\begin{table}[htbp]\n")
+        f.write("\\centering\n")
+        f.write("\\caption{Prior Tempering Transfer Learning Performance}\n")
+        f.write("\\label{tab:prior_tempering_results}\n")
+        f.write("\\begin{tabular}{cccccc}\n")
+        f.write("\\hline\n")
+        f.write("$\\beta$ & RMSE & MAE & $R^2$ & PICP & KL Div. \\\\\n")
+        f.write("\\hline\n")
+
+        for beta in sorted(results.keys()):
+            result = results[beta]
+            f.write(f"{beta:.1f} & "
+                   f"{result['rmse']:.4f} & "
+                   f"{result['mae']:.4f} & "
+                   f"{result['r2']:.4f} & "
+                   f"{result['picp']:.2f} & "
+                   f"{result['kl_divergence']:.4f} \\\\\n")
+
+        f.write("\\hline\n")
+        f.write("\\multicolumn{6}{l}{")
+        f.write(f"Best $\\beta$ = {best_beta:.1f}, "
+               f"Improvement = {improvement:.1f}\\%")
+        f.write("} \\\\\n")
+        f.write("\\hline\n")
+        f.write("\\end{tabular}\n")
+        f.write("\\end{table}\n")
+
+    latest_latex_filepath = metrics_dir / 'prior_tempering_metrics_latest.tex'
+    with open(latex_filepath, 'r') as src, open(latest_latex_filepath, 'w') as dst:
+        dst.write(src.read())
+
+    print(f"   ✓ Saved metrics to:")
+    print(f"      - JSON: {json_filepath.name}")
+    print(f"      - CSV:  {csv_filepath.name}")
+    print(f"      - LaTeX: {latex_filepath.name}")
+    print(f"   ✓ Also saved as 'latest' versions")
 
 
 def generate_synthetic_data(
@@ -246,23 +386,26 @@ def run_experiment(beta_values=[0.0, 0.3, 0.5, 0.7, 1.0], save_results=True):
     fig = create_visualizations(results, data)
 
     if save_results:
-        from datetime import datetime
-
         # Get project root directory (parent of experiments/)
         project_root = Path(__file__).parent.parent
-        output_dir = project_root / 'results' / 'figures'
-        output_dir.mkdir(parents=True, exist_ok=True)
 
         # Create timestamped filename to avoid overwriting
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Save figures
+        output_dir = project_root / 'results' / 'figures'
+        output_dir.mkdir(parents=True, exist_ok=True)
         filename = f'prior_tempering_results_{timestamp}.png'
 
-        # Also save as "latest" for easy access
         fig.savefig(output_dir / filename, dpi=300, bbox_inches='tight')
         fig.savefig(output_dir / 'prior_tempering_results_latest.png', dpi=300, bbox_inches='tight')
 
-        print(f"   ✓ Saved to {output_dir / filename}")
+        print(f"   ✓ Saved figures to {output_dir / filename}")
         print(f"   ✓ Also saved as prior_tempering_results_latest.png")
+
+        # Save metrics
+        print("\n6. Saving metrics...")
+        save_metrics_to_file(results, timestamp)
 
     plt.show()
 
