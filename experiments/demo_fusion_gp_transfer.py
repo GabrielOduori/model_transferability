@@ -24,7 +24,8 @@ try:
         hybrid_fusion_transfer,
         TransferableFusionSVGP,
         get_transfer_summary,
-        FUSION_GP_AVAILABLE
+        FUSION_GP_AVAILABLE,
+        FusionSVGP  # Import FusionSVGP from fusion_gp_transfer, not separately
     )
 
     if not FUSION_GP_AVAILABLE:
@@ -32,8 +33,6 @@ try:
         print("   Install from: github.com/GabrielOduori/fusionGP2")
         print("   This demo shows the transfer learning API structure.")
         sys.exit(0)
-
-    from models.svgp import FusionSVGP
 
 except ImportError as e:
     print(f"Import error: {e}")

@@ -15,20 +15,61 @@ import torch
 from typing import Optional, Dict, Tuple, List
 from pathlib import Path
 import sys
+import os
 
-# Add fusiongp to path if available
-fusiongp_path = Path("/media/gabriel-oduori/SERVER/dev_space/fusiongp2/fusiongp/src")
-if fusiongp_path.exists():
-    sys.path.insert(0, str(fusiongp_path))
+# Add fusiongp to path - check environment variable or use default
+fusiongp_root = Path(os.environ.get(
+    "FUSIONGP_PATH",
+    "/media/gabriel-oduori/SERVER/dev_space/fusiongp2/fusiongp"
+))
 
+# Use importlib to load fusiongp modules dynamically to avoid namespace conflicts
+# with this project's 'src' package
 try:
-    from models.svgp import FusionSVGP
-    from models.kernels import SpatioTemporalKernel
-    from models.likelihoods import MultiSourceLikelihood
+    if not fusiongp_root.exists():
+        raise ImportError(f"fusiongp root directory not found at {fusiongp_root}")
+
+    # Temporarily manipulate sys.path and sys.modules to import from fusiongp
+    import importlib.util
+
+    # Load modules directly from fusiongp
+    svgp_path = fusiongp_root / "src" / "models" / "svgp.py"
+    kernels_path = fusiongp_root / "src" / "models" / "kernels.py"
+    likelihoods_path = fusiongp_root / "src" / "models" / "likelihoods.py"
+
+    if not all(p.exists() for p in [svgp_path, kernels_path, likelihoods_path]):
+        raise ImportError("fusiongp model files not found")
+
+    # Add fusiongp to path temporarily for internal imports within fusiongp modules
+    sys.path.insert(0, str(fusiongp_root))
+
+    # Load kernels module
+    spec_kernels = importlib.util.spec_from_file_location("fusiongp_kernels", kernels_path)
+    fusiongp_kernels = importlib.util.module_from_spec(spec_kernels)
+    sys.modules["src.models.kernels"] = fusiongp_kernels  # Make it available for svgp's imports
+    spec_kernels.loader.exec_module(fusiongp_kernels)
+
+    # Load likelihoods module
+    spec_likelihoods = importlib.util.spec_from_file_location("fusiongp_likelihoods", likelihoods_path)
+    fusiongp_likelihoods = importlib.util.module_from_spec(spec_likelihoods)
+    sys.modules["src.models.likelihoods"] = fusiongp_likelihoods  # Make it available for svgp's imports
+    spec_likelihoods.loader.exec_module(fusiongp_likelihoods)
+
+    # Load svgp module
+    spec_svgp = importlib.util.spec_from_file_location("fusiongp_svgp", svgp_path)
+    fusiongp_svgp = importlib.util.module_from_spec(spec_svgp)
+    spec_svgp.loader.exec_module(fusiongp_svgp)
+
+    # Extract the classes we need
+    FusionSVGP = fusiongp_svgp.FusionSVGP
+    SpatioTemporalKernel = fusiongp_kernels.SpatioTemporalKernel
+    MultiSourceLikelihood = fusiongp_likelihoods.MultiSourceLikelihood
+
     FUSION_GP_AVAILABLE = True
-except ImportError:
+except (ImportError, FileNotFoundError, AttributeError) as e:
     FUSION_GP_AVAILABLE = False
     print("Warning: fusiongp not available. Install from github.com/GabrielOduori/fusionGP2")
+    print(f"   Import error details: {e}")
 
 
 def transfer_kernel_hyperparameters(
