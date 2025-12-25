@@ -238,7 +238,7 @@ def run_experiment(latent_dims=[5, 10, 15], save_results=True):
         print(f"\n   Latent dim = {latent_dim}:")
 
         # Train DPTR
-        vae, gp_model, likelihood, dptr_info = train_dptr_gp(
+        vae, gp_model, likelihood, adversary_net, dptr_info = train_dptr_gp(
             X_source, y_source,
             X_target, y_target,
             latent_dim=latent_dim,

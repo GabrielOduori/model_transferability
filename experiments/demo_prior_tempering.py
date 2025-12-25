@@ -280,7 +280,7 @@ def run_experiment(beta_values=[0.0, 0.3, 0.5, 0.7, 1.0], save_results=True):
         data['source']['y'],
         source_likelihood
     )
-    source_model, source_likelihood = train_baseline_gp(
+    source_model, source_likelihood, _ = train_baseline_gp(
         source_model, source_likelihood,
         data['source']['X'], data['source']['y'],
         num_iter=200,
@@ -290,7 +290,11 @@ def run_experiment(beta_values=[0.0, 0.3, 0.5, 0.7, 1.0], save_results=True):
 
     # Sample source posterior for KL divergence
     print("\n3. Sampling source posterior...")
-    source_posterior = sample_posterior(source_model, n_samples=1000)
+    source_posterior = sample_posterior(
+        source_model, source_likelihood,
+        data['source']['X'], data['source']['y'],
+        n_samples=1000
+    )
     print(f"   ✓ Sampled {len(source_posterior)} posterior samples")
 
     # Evaluate different transfer strategies
@@ -311,7 +315,7 @@ def run_experiment(beta_values=[0.0, 0.3, 0.5, 0.7, 1.0], save_results=True):
                 data['target']['y'],
                 target_likelihood
             )
-            target_model, target_likelihood = train_baseline_gp(
+            target_model, target_likelihood, _ = train_baseline_gp(
                 target_model, target_likelihood,
                 data['target']['X'], data['target']['y'],
                 num_iter=200,
@@ -319,8 +323,9 @@ def run_experiment(beta_values=[0.0, 0.3, 0.5, 0.7, 1.0], save_results=True):
             )
             strategy = "Baseline (no transfer)"
         else:
-            # Transfer with tempering
-            target_model, target_likelihood = train_tempered_gp(
+            # Transfer with tempering - use new wrapper function
+            from src.transfer_methods.prior_tempering import transfer_with_tempering
+            target_model, target_likelihood = transfer_with_tempering(
                 source_gp=source_model,
                 target_x=data['target']['X'],
                 target_y=data['target']['y'],
@@ -343,8 +348,24 @@ def run_experiment(beta_values=[0.0, 0.3, 0.5, 0.7, 1.0], save_results=True):
         )
 
         # Sample target posterior
-        target_posterior = sample_posterior(target_model, n_samples=1000)
-        kl_div = kl_divergence_distributions(source_posterior, target_posterior)
+        target_posterior = sample_posterior(
+            target_model, target_likelihood,
+            data['target']['X'], data['target']['y'],
+            n_samples=1000
+        )
+
+        # Extract hyperparameters from sampled models for KL divergence
+        def extract_hyperparams(model_list):
+            params = []
+            for m in model_list:
+                lengthscale = m.covar_module.base_kernel.lengthscale.detach().cpu().numpy().flatten()
+                outputscale = m.covar_module.outputscale.detach().cpu().numpy().flatten()
+                params.append(np.concatenate([lengthscale, outputscale]))
+            return np.array(params)
+
+        source_params = extract_hyperparams(source_posterior)
+        target_params = extract_hyperparams(target_posterior)
+        kl_div = kl_divergence_distributions(source_params, target_params)
 
         # Store results
         results[beta] = {
