@@ -65,9 +65,13 @@ paper_structure*
 data/*.csv
 data/*.nc
 
-# Model checkpoints
-*.pth
-*.pt
+# Model checkpoints (but keep structure)
+models/**/*.pth
+models/**/*.pt
+models/**/*.pkl
+models/**/*.pickle
+!models/**/.gitkeep
+!models/**/README.md
 checkpoints/
 
 # Results (keep structure, ignore large outputs)
