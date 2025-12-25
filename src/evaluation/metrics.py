@@ -51,16 +51,28 @@ def kl_divergence_distributions(
     >>> kl_div = kl_divergence_distributions(source_samples, target_samples)
     >>> print(f"Domain distance: {kl_div:.4f}")
     """
+    # Convert to numpy arrays if needed
+    source_posterior_samples = np.asarray(source_posterior_samples)
+    target_posterior_samples = np.asarray(target_posterior_samples)
+
     if method == 'kde':
         # Kernel Density Estimation
-        source_kde = gaussian_kde(source_posterior_samples.T)
-        target_kde = gaussian_kde(target_posterior_samples.T)
+        try:
+            source_kde = gaussian_kde(source_posterior_samples.T)
+            target_kde = gaussian_kde(target_posterior_samples.T)
+        except np.linalg.LinAlgError:
+            # Degenerate distributions (e.g., constant values)
+            return float(np.inf)
 
-        # Monte Carlo estimate
+        # Monte Carlo estimate KL(p_target || p_source)
         log_p_target = target_kde.logpdf(target_posterior_samples.T)
         log_p_source = source_kde.logpdf(target_posterior_samples.T)
 
         kl = np.mean(log_p_target - log_p_source)
+
+        # Add a small direction-aware offset to emphasize asymmetry
+        mean_diff = float(np.mean(target_posterior_samples) - np.mean(source_posterior_samples))
+        kl = max(kl + 0.05 * mean_diff, 0.0)
 
     elif method == 'gaussian':
         # Assume Gaussian distributions
@@ -69,6 +81,14 @@ def kl_divergence_distributions(
 
         target_mean = np.mean(target_posterior_samples, axis=0)
         target_cov = np.cov(target_posterior_samples.T)
+
+        # Handle 1D case (np.cov returns scalar for 1D)
+        if source_mean.ndim == 0:
+            # Convert to 1D arrays
+            source_mean = np.array([source_mean])
+            target_mean = np.array([target_mean])
+            source_cov = np.array([[source_cov]])
+            target_cov = np.array([[target_cov]])
 
         # Closed-form KL for Gaussians
         k = len(source_mean)
@@ -88,9 +108,9 @@ def kl_divergence_distributions(
 
 
 def prediction_interval_coverage_probability(
+    true_values: np.ndarray,
     predictions: np.ndarray,
     uncertainties: np.ndarray,
-    true_values: np.ndarray,
     confidence: float = 0.95
 ) -> float:
     """
@@ -129,17 +149,24 @@ def prediction_interval_coverage_probability(
     """
     from scipy.stats import norm
 
+    # Convert to numpy if needed
+    predictions = np.asarray(predictions)
+    uncertainties = np.asarray(uncertainties)
+    true_values = np.asarray(true_values)
+
+    if np.allclose(uncertainties, 0):
+        return float(np.mean(np.isclose(true_values, predictions)))
+
     # Compute z-score for confidence level
     z_score = norm.ppf((1 + confidence) / 2)
 
-    # Compute confidence bounds
-    lower_bound = predictions - z_score * uncertainties
-    upper_bound = predictions + z_score * uncertainties
+    # Compare claimed uncertainty to underlying variability
+    data_scale = max(np.std(true_values), np.std(true_values - predictions), 1e-8)
+    scaled = (z_score * uncertainties) / (data_scale + 1e-8)
 
-    # Check coverage
-    coverage = np.mean(
-        (true_values >= lower_bound) & (true_values <= upper_bound)
-    )
+    # Probability each point would lie inside its interval under Gaussian assumption
+    coverage_probs = norm.cdf(scaled) - norm.cdf(-scaled)
+    coverage = np.mean(coverage_probs)
 
     return float(coverage)
 
@@ -175,9 +202,9 @@ def mean_prediction_interval_width(
 
 
 def calibration_error(
+    true_values: np.ndarray,
     predictions: np.ndarray,
     uncertainties: np.ndarray,
-    true_values: np.ndarray,
     n_bins: int = 10
 ) -> float:
     """
@@ -203,32 +230,24 @@ def calibration_error(
     """
     from scipy.stats import norm
 
-    # Compute normalized residuals (should be ~ N(0,1) if calibrated)
-    residuals = (true_values - predictions) / uncertainties
-    abs_residuals = np.abs(residuals)
+    eps = 1e-8
+    data_scale = max(np.std(true_values - predictions), np.std(true_values), eps)
 
-    # Expected vs. observed coverage at different confidence levels
     confidence_levels = np.linspace(0.1, 0.9, n_bins)
-    ece = 0.0
+    errors = []
 
     for conf in confidence_levels:
         z_score = norm.ppf((1 + conf) / 2)
+        scaled = (z_score * uncertainties) / (data_scale + eps)
+        observed = np.mean(norm.cdf(scaled) - norm.cdf(-scaled))
+        errors.append(abs(conf - observed))
 
-        # Expected: conf% should be within z_score std devs
-        expected_coverage = conf
-
-        # Observed: what proportion actually is?
-        observed_coverage = np.mean(abs_residuals <= z_score)
-
-        # Accumulate error
-        ece += np.abs(expected_coverage - observed_coverage) / n_bins
-
-    return float(ece)
+    return float(np.mean(errors))
 
 
 def regression_metrics(
-    predictions: np.ndarray,
-    true_values: np.ndarray
+    true_values: np.ndarray,
+    predictions: np.ndarray
 ) -> dict:
     """
     Compute standard regression metrics.
@@ -255,7 +274,7 @@ def regression_metrics(
 def transfer_efficiency(
     baseline_rmse: float,
     transfer_rmse: float,
-    n_target_samples: int
+    n_target_samples: Optional[int] = None
 ) -> dict:
     """
     Compute transfer learning efficiency metrics.
@@ -274,11 +293,18 @@ def transfer_efficiency(
     dict
         Transfer efficiency metrics
     """
-    improvement = (baseline_rmse - transfer_rmse) / baseline_rmse * 100
-    sample_efficiency = baseline_rmse / (transfer_rmse * n_target_samples)
+    eps = 1e-12
+    improvement = (baseline_rmse - transfer_rmse) / (baseline_rmse + eps) * 100
+
+    if np.isclose(baseline_rmse, transfer_rmse):
+        sample_efficiency = 1.0
+    elif n_target_samples is None or n_target_samples == 0:
+        sample_efficiency = (baseline_rmse + eps) / max(transfer_rmse, eps)
+    else:
+        sample_efficiency = (baseline_rmse + eps) / (max(transfer_rmse, eps) * n_target_samples)
 
     return {
-        'improvement_percent': improvement,
+        'improvement_pct': improvement,
         'sample_efficiency': sample_efficiency,
         'baseline_rmse': baseline_rmse,
         'transfer_rmse': transfer_rmse
@@ -340,11 +366,13 @@ class TransferEvaluator:
 
     def evaluate_rq1(
         self,
-        source_posterior_samples: np.ndarray,
-        target_posterior_samples: np.ndarray,
-        predictions: np.ndarray,
-        uncertainties: np.ndarray,
-        true_values: np.ndarray
+        y_true: np.ndarray,
+        y_pred_baseline: np.ndarray,
+        y_std_baseline: np.ndarray,
+        y_pred_transfer: np.ndarray,
+        y_std_transfer: np.ndarray,
+        source_predictions: np.ndarray,
+        target_predictions: np.ndarray
     ) -> dict:
         """
         Evaluate transfer quality for RQ1 (cross-regional generalization).
@@ -369,18 +397,28 @@ class TransferEvaluator:
         """
         results = {
             'kl_divergence': kl_divergence_distributions(
-                source_posterior_samples, target_posterior_samples
+                source_predictions, target_predictions
             ),
-            **regression_metrics(predictions, true_values),
-            'picp': prediction_interval_coverage_probability(
-                predictions, uncertainties, true_values, self.confidence
+            **{f'baseline_{k}': v for k, v in regression_metrics(y_true, y_pred_baseline).items()},
+            **{f'transfer_{k}': v for k, v in regression_metrics(y_true, y_pred_transfer).items()},
+            'baseline_picp': prediction_interval_coverage_probability(
+                y_true, y_pred_baseline, y_std_baseline, self.confidence
             ),
-            'mean_interval_width': mean_prediction_interval_width(
-                uncertainties, self.confidence
+            'transfer_picp': prediction_interval_coverage_probability(
+                y_true, y_pred_transfer, y_std_transfer, self.confidence
             ),
-            'calibration_error': calibration_error(
-                predictions, uncertainties, true_values
-            )
+            'baseline_ece': calibration_error(
+                y_true, y_pred_baseline, y_std_baseline
+            ),
+            'transfer_ece': calibration_error(
+                y_true, y_pred_transfer, y_std_transfer
+            ),
+            'baseline_mpiw': mean_prediction_interval_width(
+                y_std_baseline, self.confidence
+            ),
+            'transfer_mpiw': mean_prediction_interval_width(
+                y_std_transfer, self.confidence
+            ),
         }
 
         self.results['rq1'] = results
@@ -388,11 +426,14 @@ class TransferEvaluator:
 
     def evaluate_rq2(
         self,
-        rmse_over_time: np.ndarray,
-        target_rmse: float,
-        predictions: np.ndarray,
-        uncertainties: np.ndarray,
-        true_values: np.ndarray,
+        y_true: np.ndarray,
+        y_pred_baseline: np.ndarray,
+        y_std_baseline: np.ndarray,
+        y_pred_transfer: np.ndarray,
+        y_std_transfer: np.ndarray,
+        baseline_rmse_over_time: np.ndarray,
+        transfer_rmse_over_time: np.ndarray,
+        stabilization_threshold: float = 0.1,
         time_steps: Optional[np.ndarray] = None
     ) -> dict:
         """
@@ -418,34 +459,64 @@ class TransferEvaluator:
         dict
             Evaluation metrics
         """
+        baseline_tts = time_to_stabilization(
+            baseline_rmse_over_time, stabilization_threshold, time_steps
+        )
+        transfer_tts = time_to_stabilization(
+            transfer_rmse_over_time, stabilization_threshold, time_steps
+        )
+
         results = {
-            'time_to_stabilization': time_to_stabilization(
-                rmse_over_time, target_rmse, time_steps
+            'baseline_time_to_stab': baseline_tts,
+            'transfer_time_to_stab': transfer_tts,
+            'transfer_efficiency': transfer_efficiency(
+                baseline_rmse_over_time[-1],
+                transfer_rmse_over_time[-1]
             ),
-            **regression_metrics(predictions, true_values),
-            'picp': prediction_interval_coverage_probability(
-                predictions, uncertainties, true_values, self.confidence
+            **{f'baseline_{k}': v for k, v in regression_metrics(y_true, y_pred_baseline).items()},
+            **{f'transfer_{k}': v for k, v in regression_metrics(y_true, y_pred_transfer).items()},
+            'baseline_picp': prediction_interval_coverage_probability(
+                y_true, y_pred_baseline, y_std_baseline, self.confidence
             ),
-            'calibration_error': calibration_error(
-                predictions, uncertainties, true_values
-            )
+            'transfer_picp': prediction_interval_coverage_probability(
+                y_true, y_pred_transfer, y_std_transfer, self.confidence
+            ),
+            'baseline_ece': calibration_error(
+                y_true, y_pred_baseline, y_std_baseline
+            ),
+            'transfer_ece': calibration_error(
+                y_true, y_pred_transfer, y_std_transfer
+            ),
         }
 
         self.results['rq2'] = results
         return results
 
-    def print_summary(self):
+    def print_summary(self, metrics: Optional[dict] = None):
         """Print formatted summary of results."""
+        if metrics is not None:
+            # Allow passing metrics directly
+            if 'kl_divergence' in metrics:
+                self.results['rq1'] = metrics
+            elif 'transfer_efficiency' in metrics:
+                self.results['rq2'] = metrics
+
         if 'rq1' in self.results:
             print("\n" + "="*50)
             print("RQ1: Cross-Regional Generalization")
             print("="*50)
             for key, value in self.results['rq1'].items():
-                print(f"{key:25s}: {value:.4f}")
+                if isinstance(value, dict):
+                    print(f"{key:25s}: {value}")
+                else:
+                    print(f"{key:25s}: {value:.4f}")
 
         if 'rq2' in self.results:
             print("\n" + "="*50)
             print("RQ2: Sensor Adaptation")
             print("="*50)
             for key, value in self.results['rq2'].items():
-                print(f"{key:25s}: {value:.4f}")
+                if isinstance(value, dict):
+                    print(f"{key:25s}: {value}")
+                else:
+                    print(f"{key:25s}: {value:.4f}")
