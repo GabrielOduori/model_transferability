@@ -28,34 +28,54 @@ from src.evaluation.metrics import regression_metrics
 import gpytorch
 
 
-def generate_synthetic_cork_data(n_target=50, n_test=100, seed=42):
+def generate_synthetic_cork_data(n_target=50, n_test=100, n_features=3, seed=42):
     """
     Generate synthetic Cork data for transfer learning experiments.
 
     Simulates Cork air quality measurements with domain shift from Dublin.
+
+    Parameters
+    ----------
+    n_target : int
+        Number of Cork training samples
+    n_test : int
+        Number of Cork test samples
+    n_features : int
+        Number of features (should match Dublin model: 3 for FusionGP = [x, y, time])
+    seed : int
+        Random seed
     """
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    # Target domain (Cork): shifted distribution from Dublin
-    X_target = torch.randn(n_target, 10) * 1.5 + 0.5
+    # Target domain (Cork): 3D spatiotemporal features [x, y, time]
+    # x, y: spatial coordinates (normalized)
+    # time: temporal coordinate (normalized)
+    X_target = torch.randn(n_target, n_features) * 0.5 + 0.5  # Centered around Dublin
+
+    # Add systematic offset for Cork (different location)
+    X_target[:, :2] += 0.3  # Cork is offset from Dublin in space
+
+    # Generate NO₂ concentrations with spatiotemporal pattern
     y_target = (
-        2.0 * X_target[:, 0] +
-        1.5 * X_target[:, 1] -
-        0.8 * X_target[:, 2] +
-        torch.randn(n_target) * 0.5 +
-        1.0  # Systematic offset from Dublin
-    ) * 10.0 + 25.0  # Scale to realistic NO₂ values (µg/m³)
+        15.0 +  # Base concentration
+        5.0 * torch.sin(2 * np.pi * X_target[:, 0]) +  # Spatial pattern in x
+        3.0 * torch.cos(2 * np.pi * X_target[:, 1]) +  # Spatial pattern in y
+        2.0 * torch.sin(4 * np.pi * X_target[:, 2]) +  # Temporal pattern
+        torch.randn(n_target) * 1.5  # Noise
+    )
 
     # Test data (same distribution as Cork target)
-    X_test = torch.randn(n_test, 10) * 1.5 + 0.5
+    X_test = torch.randn(n_test, n_features) * 0.5 + 0.5
+    X_test[:, :2] += 0.3  # Same Cork offset
+
     y_test = (
-        2.0 * X_test[:, 0] +
-        1.5 * X_test[:, 1] -
-        0.8 * X_test[:, 2] +
-        torch.randn(n_test) * 0.5 +
-        1.0
-    ) * 10.0 + 25.0
+        15.0 +
+        5.0 * torch.sin(2 * np.pi * X_test[:, 0]) +
+        3.0 * torch.cos(2 * np.pi * X_test[:, 1]) +
+        2.0 * torch.sin(4 * np.pi * X_test[:, 2]) +
+        torch.randn(n_test) * 1.5
+    )
 
     return {
         'target': {'X': X_target, 'y': y_target},
@@ -70,66 +90,120 @@ def load_dublin_fusiongp(model_path: str):
     Parameters
     ----------
     model_path : str
-        Path to saved FusionGP model (.pt file)
+        Path to saved FusionGP model (.pth file)
 
     Returns
     -------
-    model : gpytorch.models.ExactGP
-        Loaded FusionGP model
+    model : BaselineGP
+        Loaded FusionGP model (simplified for transfer)
     likelihood : gpytorch.likelihoods.Likelihood
         Associated likelihood
     """
     print(f"\n📦 Loading Dublin FusionGP model from: {model_path}")
 
-    checkpoint = torch.load(model_path, map_location='cpu')
+    # Load checkpoint
+    checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
 
-    # Extract model components from checkpoint
-    # Note: Adjust this based on your actual checkpoint structure
-    if isinstance(checkpoint, dict):
-        print(f"   Checkpoint keys: {list(checkpoint.keys())}")
-        # You'll need to reconstruct the model from the checkpoint
-        # This is a placeholder - adjust based on your actual model structure
-        raise NotImplementedError(
-            "Please implement FusionGP model loading based on your checkpoint structure. "
-            "Check the checkpoint keys and model architecture."
-        )
-    else:
-        model = checkpoint  # If checkpoint is the model directly
-        likelihood = gpytorch.likelihoods.GaussianLikelihood()
+    print(f"   Model: FusionGP with {checkpoint['model_config']['n_inducing']} inducing points")
+    print(f"   Kernel: {checkpoint['model_config']['kernel_type']}")
+
+    # Extract inducing points as pseudo-training data for transfer
+    inducing_points = checkpoint['model_state_dict']['variational_strategy.inducing_points']
+    variational_mean = checkpoint['model_state_dict']['variational_strategy._variational_distribution.variational_mean']
+
+    # Use a subset for BaselineGP (for transfer learning compatibility)
+    n_pseudo = min(100, len(inducing_points))
+    train_x = inducing_points[:n_pseudo, :]
+    train_y = variational_mean[:n_pseudo]
+
+    print(f"   Using {n_pseudo} inducing points as pseudo-training data")
+
+    # Create BaselineGP model (compatible with our transfer methods)
+    from src.models.gp_model import BaselineGP
+
+    likelihood = gpytorch.likelihoods.GaussianLikelihood()
+    model = BaselineGP(train_x, train_y, likelihood)
+
+    # Load learned hyperparameters
+    try:
+        # Set lengthscales
+        if 'covar_module.spatial_kernel.raw_lengthscale' in checkpoint['model_state_dict']:
+            spatial_ls = checkpoint['model_state_dict']['covar_module.spatial_kernel.raw_lengthscale']
+            model.covar_module.base_kernel.lengthscale = spatial_ls[:, :2]  # Spatial dims only
+
+        # Set outputscale
+        if 'covar_module.outputscale_param' in checkpoint['model_state_dict']:
+            outputscale = checkpoint['model_state_dict']['covar_module.outputscale_param']
+            model.covar_module.outputscale = outputscale
+
+        # Set mean
+        if 'mean_module.raw_constant' in checkpoint['model_state_dict']:
+            mean_const = checkpoint['model_state_dict']['mean_module.raw_constant']
+            model.mean_module.constant.data = mean_const
+
+        print("   ✓ Loaded learned hyperparameters")
+    except Exception as e:
+        print(f"   ⚠️  Partial hyperparameter loading: {e}")
 
     model.eval()
-    print("   ✓ FusionGP loaded successfully")
+    likelihood.eval()
+    print("   ✓ FusionGP converted to BaselineGP for transfer")
 
     return model, likelihood
 
 
-def load_dublin_gam_ssm_lur(model_path: str = None):
+def load_dublin_gam_ssm_lur(gam_path: str, ssm_path: str, data_path: str):
     """
     Load pre-trained Dublin GAM-SSM-LUR model.
 
     Parameters
     ----------
-    model_path : str, optional
-        Path to saved GAM-SSM-LUR model
+    gam_path : str
+        Path to GAM component (.pkl)
+    ssm_path : str
+        Path to SSM component (.pkl)
+    data_path : str
+        Path to training data (.npz)
 
     Returns
     -------
-    model :
-        Loaded GAM-SSM-LUR model
+    model : dict
+        Loaded GAM-SSM-LUR components
+    data : dict
+        Training data
     """
     print(f"\n📦 Loading Dublin GAM-SSM-LUR model")
 
-    if model_path is None:
-        print("   ⚠️  No GAM-SSM-LUR checkpoint provided")
-        print("   Using synthetic model for now")
-        # Create placeholder - replace with actual loading
-        raise NotImplementedError(
-            "Please provide GAM-SSM-LUR model checkpoint path or implement loading."
-        )
+    import pickle
+    import numpy as np
 
-    # Load GAM-SSM-LUR model
-    # This will depend on how you saved it
-    raise NotImplementedError("Implement GAM-SSM-LUR loading based on your save format")
+    # Load GAM component
+    with open(gam_path, 'rb') as f:
+        gam_model = pickle.load(f)
+    print(f"   ✓ Loaded GAM component")
+
+    # Load SSM component
+    with open(ssm_path, 'rb') as f:
+        ssm_model = pickle.load(f)
+    print(f"   ✓ Loaded SSM component")
+
+    # Load training data
+    data_npz = np.load(data_path)
+    data = {
+        'X_train': data_npz['X_train'],
+        'y_train': data_npz['y_train'],
+        'y_matrix': data_npz['y_matrix'],
+        'residual_matrix': data_npz['residual_matrix']
+    }
+    print(f"   ✓ Loaded training data: {data['X_train'].shape[0]} samples, {data['X_train'].shape[1]} features")
+
+    model = {
+        'gam': gam_model,
+        'ssm': ssm_model,
+        'type': 'GAM-SSM-LUR'
+    }
+
+    return model, data
 
 
 def transfer_fusiongp_with_prior_tempering(
@@ -250,9 +324,12 @@ def main():
     print("  Methods: Prior Tempering, OBTL")
     print("="*70)
 
-    # Paths to your saved models
-    fusiongp_path = Path(__file__).parent.parent / \
-        'gam_ssm_lur' / 'fusionGP2' / 'fusiongp' / 'notebooks' / 'fusiongp_model.pt'
+    # Paths to saved models
+    base_path = Path(__file__).parent.parent
+    fusiongp_path = base_path / 'models' / 'fusiongp' / 'dublin' / 'fusiongp_model.pth'
+    gam_path = base_path / 'models' / 'gam_ssm_lur' / 'dublin' / 'gam.pkl'
+    ssm_path = base_path / 'models' / 'gam_ssm_lur' / 'dublin' / 'ssm.pkl'
+    gam_data_path = base_path / 'models' / 'gam_ssm_lur' / 'dublin' / 'training_data.npz'
 
     # Generate synthetic Cork data
     print("\n📦 Generating synthetic Cork data...")
@@ -263,14 +340,10 @@ def main():
     # Load Dublin FusionGP
     try:
         dublin_fusiongp, dublin_likelihood = load_dublin_fusiongp(str(fusiongp_path))
-    except NotImplementedError as e:
-        print(f"\n⚠️  {e}")
-        print("\nNEXT STEPS:")
-        print("1. Inspect your saved model checkpoint:")
-        print(f"   checkpoint = torch.load('{fusiongp_path}')")
-        print("   print(checkpoint.keys())")
-        print("2. Update load_dublin_fusiongp() to reconstruct your model")
-        print("3. Provide Dublin training data for OBTL experiments")
+    except Exception as e:
+        print(f"\n❌ Error loading FusionGP: {e}")
+        import traceback
+        traceback.print_exc()
         return
 
     # Experiment 1: FusionGP with Prior Tempering
