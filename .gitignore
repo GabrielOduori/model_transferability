@@ -20,6 +20,18 @@ wheels/
 .installed.cfg
 *.egg
 
+# Testing
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# Temporary test/verification files
+test_*_fix.py
+verify_*.py
+fix_tests.py
+*_files/  # HTML export artifacts
+
 
 
 docs/*
