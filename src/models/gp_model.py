@@ -9,6 +9,7 @@ import torch
 import gpytorch
 from typing import Tuple, Optional
 import numpy as np
+import copy
 
 
 class BaselineGP(gpytorch.models.ExactGP):
@@ -72,7 +73,7 @@ def train_baseline_gp(
     num_iter: int = 100,
     lr: float = 0.1,
     verbose: bool = True
-) -> Tuple[BaselineGP, gpytorch.likelihoods.Likelihood]:
+) -> Tuple[BaselineGP, gpytorch.likelihoods.Likelihood, list]:
     """
     Train baseline GP model.
 
@@ -106,12 +107,14 @@ def train_baseline_gp(
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
+    losses = []
     for i in range(num_iter):
         optimizer.zero_grad()
         output = model(train_x)
         loss = -mll(output, train_y)
         loss.backward()
         optimizer.step()
+        losses.append(loss.item())
 
         if verbose and (i + 1) % 10 == 0:
             print(f'Iter {i+1}/{num_iter} - Loss: {loss.item():.3f}')
@@ -119,14 +122,14 @@ def train_baseline_gp(
     model.eval()
     likelihood.eval()
 
-    return model, likelihood
+    return model, likelihood, losses
 
 
 def predict_with_uncertainty(
     model: gpytorch.models.ExactGP,
     likelihood: gpytorch.likelihoods.Likelihood,
     test_x: torch.Tensor
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Make predictions with uncertainty quantification.
 
@@ -151,19 +154,23 @@ def predict_with_uncertainty(
 
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
         pred_dist = likelihood(model(test_x))
-        predictions = pred_dist.mean.numpy()
-        uncertainties = pred_dist.stddev.numpy()
+        predictions = pred_dist.mean.squeeze(-1)
+        uncertainties = pred_dist.stddev.squeeze(-1)
 
     return predictions, uncertainties
 
 
 def sample_posterior(
     model: gpytorch.models.ExactGP,
+    likelihood: gpytorch.likelihoods.Likelihood,
+    train_x: torch.Tensor,
+    train_y: torch.Tensor,
     n_samples: int = 1000,
+    prior_variance: float = 0.1,
     sample_lengthscale: bool = True,
     sample_outputscale: bool = True,
     sample_noise: bool = True
-) -> np.ndarray:
+) -> list:
     """
     Sample from posterior distribution of hyperparameters.
 
@@ -194,40 +201,35 @@ def sample_posterior(
     around the MAP estimate. For more rigorous sampling, use MCMC or
     variational inference.
     """
-    samples = []
+    # Simple Gaussian approximation around MAP estimate
+    sampled_models = []
 
-    # Get current hyperparameter values (MAP estimates)
-    lengthscale = model.covar_module.base_kernel.lengthscale.detach().numpy()
-    outputscale = model.covar_module.outputscale.detach().numpy()
-    noise = model.likelihood.noise.detach().numpy()
+    base_lengthscale = model.covar_module.base_kernel.lengthscale.detach().cpu()
+    base_outputscale = model.covar_module.outputscale.detach().cpu()
+    base_noise = likelihood.noise.detach().cpu()
 
-    # Sample from log-normal distributions (crude approximation)
-    # In practice, you'd use proper posterior sampling (MCMC, VI, etc.)
+    scale = float(np.sqrt(max(prior_variance, 1e-6)))
+
     for _ in range(n_samples):
-        sample = []
+        m_copy = copy.deepcopy(model)
 
-        if sample_lengthscale:
-            # Log-normal around current value
-            ls_sample = np.exp(
-                np.log(lengthscale) + np.random.normal(0, 0.1, size=lengthscale.shape)
-            )
-            sample.append(ls_sample.flatten())
+        with torch.no_grad():
+            if sample_lengthscale:
+                noise_factor = torch.exp(torch.randn_like(base_lengthscale) * scale)
+                m_copy.covar_module.base_kernel.lengthscale = base_lengthscale * noise_factor
 
-        if sample_outputscale:
-            os_sample = np.exp(
-                np.log(outputscale) + np.random.normal(0, 0.1)
-            )
-            sample.append(np.atleast_1d(os_sample).flatten())
+            if sample_outputscale:
+                os_factor = torch.exp(torch.randn_like(base_outputscale) * scale)
+                m_copy.covar_module.outputscale = base_outputscale * os_factor
 
-        if sample_noise:
-            noise_sample = np.exp(
-                np.log(noise) + np.random.normal(0, 0.1)
-            )
-            sample.append(np.atleast_1d(noise_sample).flatten())
+            if sample_noise and hasattr(likelihood, "noise"):
+                noise_factor = torch.exp(torch.randn_like(base_noise) * scale)
+                if hasattr(m_copy, "likelihood"):
+                    m_copy.likelihood.noise = base_noise * noise_factor
 
-        samples.append(np.concatenate(sample))
+        sampled_models.append(m_copy)
 
-    return np.array(samples)
+    return sampled_models
 
 
 class SpatialTemporalGP(gpytorch.models.ExactGP):
