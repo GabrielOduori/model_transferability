@@ -37,6 +37,7 @@ fix_tests.py
 docs/*
 manuscript/*
 results/*
+images/*
 
 # Virtual environments
 venv/
@@ -44,8 +45,9 @@ env/
 ENV/
 .venv
 .env/
+gam_ssm_lur/*
 
-
+results/
 paper_structure*
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -77,6 +79,7 @@ checkpoints/
 # Results (keep structure, ignore large outputs)
 results/**/*.png
 results/**/*.pdf
+results/**/*.json
 results/**/*.csv
 !results/.gitkeep
 
