@@ -91,3 +91,6 @@ fusionGP2/
 
 # Documentation (conversation logs - not for GitHub)
 docs/SETUP_CONVERSATION.md
+
+# VSCode Git extension logs
+Git.log
