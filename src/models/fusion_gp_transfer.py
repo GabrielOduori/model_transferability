@@ -20,7 +20,7 @@ import os
 # Add fusiongp to path - check environment variable or use default
 fusiongp_root = Path(os.environ.get(
     "FUSIONGP_PATH",
-    "/media/gabriel-oduori/SERVER/dev_space/fusiongp2/fusiongp"
+    "/media/gabriel-oduori/SERVER/dev_space/model_transferability/gam_ssm_lur/fusionGP2/fusiongp"
 ))
 
 # Use importlib to load fusiongp modules dynamically to avoid namespace conflicts

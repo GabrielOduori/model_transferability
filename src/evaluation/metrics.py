@@ -264,10 +264,18 @@ def regression_metrics(
     dict
         Dictionary with RMSE, MAE, R² metrics
     """
+    # Compute R² with protection against extreme values
+    r2 = r2_score(true_values, predictions)
+
+    # Handle non-finite R² values (inf or nan)
+    # But keep actual negative values to see true model performance
+    if not np.isfinite(r2):
+        r2 = -100.0  # Sentinel value for numerical issues
+
     return {
         'rmse': np.sqrt(mean_squared_error(true_values, predictions)),
         'mae': mean_absolute_error(true_values, predictions),
-        'r2': r2_score(true_values, predictions)
+        'r2': r2
     }
 
 
