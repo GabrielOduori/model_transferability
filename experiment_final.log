@@ -1,0 +1,262 @@
+======================================================================
+MODEL TRANSFER LEARNING EXPERIMENTS
+======================================================================
+
+Transfer Scenario:
+  Source: Pre-trained models (real Source domain data)
+    - FusionGP
+    - GAM-SSM-LUR
+  Target: Synthetic Target domain data
+  Methods: Prior Tempering, OBTL
+======================================================================
+
+ Experiment Configuration:
+   Target samples: 50
+   Test samples: 100
+   Lambda values: [0.0, 0.3, 0.5, 0.7, 1.0]
+   Delta values: [0.3, 0.5, 0.7, 1.0]
+   Random seed: 42
+
+ Generating synthetic Target domain data...
+
+✓ Loading saved synthetic data: target_data_seed42.npz
+  Metadata: n_target=50, n_test=100, seed=42, domain_shift=0.3
+  ✓ Using saved data for reproducibility
+   ✓ Target: 50 samples
+   ✓ Test:   100 samples
+
+ Standardizing target data...
+   Before: y_target mean=14.32, std=4.71
+   Before: y_test mean=14.62, std=4.33
+   After: y_target mean=-0.00, std=1.00
+   After: y_test mean=0.06, std=0.92
+   ✓ Data standardized (mean=0, std=1)
+   ✓ Normalization: y_norm = (y - 14.32) / 4.71
+
+📋 Model Files Status:
+   ✓ fusiongp: True
+   ✓ gam: True
+   ✓ ssm: True
+   ✓ gam_data: True
+
+ Loading FusionGP model...
+
+🔄 Loading FusionGP model from: fusiongp_model.pth
+   Model: FusionGP with 800 inducing points
+   Kernel: matern32
+   Using 100 inducing points as pseudo-training data
+   ⚠️  Partial hyperparameter loading: Attempting to manually set a parameter value that is out of bounds of its current constraints, Positive(). Most likely, you want to do the following:
+ likelihood = GaussianLikelihood(noise_constraint=gpytorch.constraints.GreaterThan(better_lower_bound))
+   ✓ FusionGP converted to BaselineGP for transfer
+   ✓ FusionGP loaded successfully
+
+ Loading GAM-SSM-LUR model...
+
+🔄 Loading GAM-SSM-LUR model
+   ✓ Loaded GAM component
+   ✓ Loaded SSM component
+   ✓ Loaded training data: 20000 samples, 30 features
+   ✓ GAM-SSM-LUR loaded successfully
+
+======================================================================
+EXPERIMENT: FusionGP_Prior_Tempering
+======================================================================
+Source: Real FusionGP (Source domain)
+Target: Synthetic Target domain data (50 samples)
+lambda values: [0.0, 0.3, 0.5, 0.7, 1.0]
+
+  lambda = 0.00
+    RMSE: 0.65 µg/m³
+    MAE:  0.47 µg/m³
+    R²:   0.2226
+
+  lambda = 0.30
+    RMSE: 0.92 µg/m³
+    MAE:  0.74 µg/m³
+    R²:   -11.2362
+
+  lambda = 0.50
+    RMSE: 0.92 µg/m³
+    MAE:  0.74 µg/m³
+    R²:   -11.5630
+
+  lambda = 0.70
+    RMSE: 0.92 µg/m³
+    MAE:  0.74 µg/m³
+    R²:   -11.6895
+
+  lambda = 1.00
+    RMSE: 0.92 µg/m³
+    MAE:  0.74 µg/m³
+    R²:   -11.7797
+
+======================================================================
+EXPERIMENT: GAM-SSM-LUR_Prior_Tempering
+======================================================================
+Source: Real GAM-SSM-LUR (Source domain)
+Target: Synthetic Target domain data (50 samples)
+lambda values: [0.0, 0.3, 0.5, 0.7, 1.0]
+
+  lambda = 0.00
+    RMSE: 0.65 µg/m³
+    MAE:  0.47 µg/m³
+    R²:   0.2226
+
+  lambda = 0.30
+    RMSE: 1.07 µg/m³
+    MAE:  0.89 µg/m³
+    R²:   -3697.9661
+
+  lambda = 0.50
+    RMSE: 1.07 µg/m³
+    MAE:  0.89 µg/m³
+    R²:   -3697.9661
+
+  lambda = 0.70
+    RMSE: 1.07 µg/m³
+    MAE:  0.89 µg/m³
+    R²:   -3697.9661
+
+  lambda = 1.00
+    RMSE: 1.07 µg/m³
+    MAE:  0.89 µg/m³
+    R²:   -3697.9661
+   Source data: 100 training points
+
+======================================================================
+EXPERIMENT: FusionGP_OBTL
+======================================================================
+Source: Real FusionGP (Source domain)
+Target: Synthetic Target domain data (50 samples)
+delta values: [0.3, 0.5, 0.7, 1.0]
+
+  delta = 0.30
+    RMSE: 0.86 µg/m³
+    MAE:  0.72 µg/m³
+    R²:   -10.1990
+    Transfer weights: Source=0.174, Target=0.826
+
+  delta = 0.50
+    RMSE: 0.86 µg/m³
+    MAE:  0.72 µg/m³
+    R²:   -9.3596
+    Transfer weights: Source=0.259, Target=0.741
+
+  delta = 0.70
+    RMSE: 0.86 µg/m³
+    MAE:  0.72 µg/m³
+    R²:   -9.6660
+    Transfer weights: Source=0.329, Target=0.671
+
+  delta = 1.00
+    RMSE: 0.91 µg/m³
+    MAE:  0.72 µg/m³
+    R²:   -1222.4259
+    Transfer weights: Source=0.412, Target=0.588
+   Source data: 20000 training points
+
+======================================================================
+EXPERIMENT: GAM-SSM-LUR_OBTL
+======================================================================
+Source: Real GAM-SSM-LUR (Source domain)
+Target: Synthetic Target domain data (50 samples)
+delta values: [0.3, 0.5, 0.7, 1.0]
+
+  delta = 0.30
+      Removed 19622 duplicate/near-duplicate points
+    RMSE: 0.91 µg/m³
+    MAE:  0.72 µg/m³
+    R²:   -152.7751
+    Transfer weights: Source=0.174, Target=0.826
+
+  delta = 0.50
+      Removed 19622 duplicate/near-duplicate points
+    RMSE: 0.92 µg/m³
+    MAE:  0.73 µg/m³
+    R²:   -65.3857
+    Transfer weights: Source=0.259, Target=0.741
+
+  delta = 0.70
+      Removed 19622 duplicate/near-duplicate points
+    RMSE: 0.95 µg/m³
+    MAE:  0.76 µg/m³
+    R²:   -26.0916
+    Transfer weights: Source=0.329, Target=0.671
+
+  delta = 1.00
+      Removed 19622 duplicate/near-duplicate points
+    RMSE: 1.02 µg/m³
+    MAE:  0.80 µg/m³
+    R²:   -6.0255
+    Transfer weights: Source=0.412, Target=0.588
+
+📊 Exporting results...
+   Saved: results_20251229_225351.json
+   Saved: tables/prior_tempering_results.csv
+   Saved: tables/prior_tempering_results.tex
+   Saved: tables/obtl_results.csv
+   Saved: tables/obtl_results.tex
+   Saved: tables/summary_best_results.csv
+   Saved: tables/summary_best_results.tex
+
+✅ All tables exported to: experiment_20251229_225351/tables/
+   • Prior Tempering: prior_tempering_results.{csv,tex}
+   • OBTL: obtl_results.{csv,tex}
+   • Summary: summary_best_results.{csv,tex}
+
+🎨 Creating visualizations...
+   Saved: prior_tempering_fancy_20251229_225351.png
+   Saved: obtl_fancy_20251229_225351.png
+   Saved: summary_comparison_20251229_225351.png
+   ✓ Saved: prior_tempering_concept_20251229_225351.png
+   ✓ Saved: prior_tempering_concept_20251229_225351.pdf
+   ✓ Saved: spatial_comparison_20251229_225351.png
+   ✓ Saved: spatial_comparison_20251229_225351.pdf
+   ⚠️  Could not create gain/loss diagnostics: plot_transfer_gain_loss() got an unexpected keyword argument 'method'
+   ⚠️  Could not create weight evolution: 'delta'
+
+✅ All visualizations saved to: experiment_20251229_225351/figures/
+
+======================================================================
+EXPERIMENTS COMPLETE!
+======================================================================
+
+ Experiment folder: results/experiment_20251229_225351
+
+ Best Results Summary:
+
+  FusionGP:
+    Prior Tempering: λ=0.0, RMSE=0.65 µg/m³, R²=0.2226
+    OBTL:            δ=0.3, RMSE=0.86 µg/m³, R²=-10.1990
+
+  GAM-SSM-LUR:
+    Prior Tempering: λ=0.0, RMSE=0.65 µg/m³, R²=0.2226
+    OBTL:            δ=0.3, RMSE=0.91 µg/m³, R²=-152.7751
+
+======================================================================
+EXPERIMENT STRUCTURE:
+======================================================================
+
+experiment_20251229_225351/
+├── results_20251229_225351.json              # All experimental results (JSON)
+├── tables/                               # Results tables (CSV + LaTeX)
+│   ├── prior_tempering_results.csv
+│   ├── prior_tempering_results.tex
+│   ├── obtl_results.csv
+│   ├── obtl_results.tex
+│   ├── summary_best_results.csv
+│   └── summary_best_results.tex
+└── figures/                              # Publication-quality plots (13 files)
+    ├── prior_tempering_fancy_20251229_225351.png
+    ├── obtl_fancy_20251229_225351.png
+    ├── summary_comparison_20251229_225351.png
+    ├── prior_tempering_concept_20251229_225351.{png,pdf}
+    ├── spatial_comparison_20251229_225351.{png,pdf}
+    ├── pt_gain_loss_20251229_225351.{png,pdf}
+    ├── obtl_gain_loss_20251229_225351.{png,pdf}
+    └── obtl_weights_20251229_225351.{png,pdf}
+
+======================================================================
+ Success! Results saved to: results/experiment_20251229_225351
+======================================================================
+
