@@ -326,24 +326,24 @@ class VisualizationManager:
     def _create_gain_loss_diagnostics(self, all_results: Dict):
         """Create gain/loss waterfall charts."""
         try:
-            # Prior Tempering Gain/Loss
+            # Prior Tempering Gain/Loss - FusionGP
             pt_path = self.fig_dir / f'pt_gain_loss_{self.timestamp}.png'
             plot_transfer_gain_loss(
-                results=all_results,
-                method='prior_tempering',
-                baseline_metric=100.0,  # Example baseline
+                results=all_results['fusiongp_prior_tempering'],
+                baseline_metric=0.92,  # Baseline RMSE
                 output_path=pt_path,
-                save_pdf=True
+                save_pdf=True,
+                metric='rmse'
             )
 
-            # OBTL Gain/Loss
+            # OBTL Gain/Loss - FusionGP
             obtl_path = self.fig_dir / f'obtl_gain_loss_{self.timestamp}.png'
             plot_transfer_gain_loss(
-                results=all_results,
-                method='obtl',
-                baseline_metric=100.0,  # Example baseline
+                results=all_results['fusiongp_obtl'],
+                baseline_metric=0.92,  # Baseline RMSE
                 output_path=obtl_path,
-                save_pdf=True
+                save_pdf=True,
+                metric='rmse'
             )
         except Exception as e:
             print(f"   ⚠️  Could not create gain/loss diagnostics: {e}")
@@ -352,15 +352,19 @@ class VisualizationManager:
         """Create OBTL weight evolution visualization."""
         try:
             weight_path = self.fig_dir / f'obtl_weights_{self.timestamp}.png'
-            obtl_results = [
-                all_results['fusiongp_obtl'],
-                all_results['gam_ssm_lur_obtl']
-            ]
-            plot_transfer_weight_evolution(
-                obtl_results=obtl_results,
-                output_path=weight_path,
-                save_pdf=True
-            )
+            # Extract results arrays from both models
+            fgp_results = all_results['fusiongp_obtl'].get('results', [])
+            gam_results = all_results['gam_ssm_lur_obtl'].get('results', [])
+
+            # Combine all OBTL results for weight evolution plot
+            obtl_results = fgp_results + gam_results
+
+            if obtl_results:
+                plot_transfer_weight_evolution(
+                    obtl_results=obtl_results,
+                    output_path=weight_path,
+                    save_pdf=True
+                )
         except Exception as e:
             print(f"   ⚠️  Could not create weight evolution: {e}")
 
