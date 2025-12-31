@@ -315,7 +315,7 @@ A: Use the `device` fixture and mark tests with `@pytest.mark.gpu`.
 
 A: Check random seeds, file paths, and environment dependencies.
 
-**Q: How do I test code that uses external packages (gam_ssm_lur, fusiongp2)?**
+**Q: How do I test code that uses external packages (gam_ssm_lur, fusiongp)?**
 
 A: Mark with `@pytest.mark.optional` and use `pytest.importorskip()`.
 

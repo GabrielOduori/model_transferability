@@ -4,9 +4,9 @@ This repository implements transfer learning methods for air quality models acro
 
 ## Research Questions
 
-**RQ1**: How can transfer learning be used to generalize air-quality models across different geographic regions?
+**RQ1**: Can probabilistic transfer learning methods enable air quality models to generalize across different geographic regions with limited target domain data?
 
-**RQ2**: What domain-adaptation techniques are most effective for low-cost sensor networks?
+**RQ2**: How do different transfer learning approaches compare in terms of prediction accuracy, uncertainty calibration, and computational efficiency for air quality applications?
 
 ## Overview
 
@@ -28,13 +28,13 @@ This project implements three probabilistic transfer learning paradigms:
 | GP Models | ✅ Complete | Baseline and spatial-temporal GPs |
 | Evaluation Metrics | ✅ Complete | KL divergence, PICP, RMSE, calibration |
 | Demo Experiments | ✅ Complete | All transfer methods with synthetic data |
-| Real Data Integration | 🔄 In Progress | Awaiting Dublin model data |
+| Real Model Transfer | ✅ Complete | 2×2 framework (FusionGP + GAM-SSM-LUR × Prior Tempering + OBTL) |
 
 ## Models
 
 - **GPyTorch Gaussian Process**: Spatial-temporal air quality prediction with uncertainty quantification
 - **GAM-SSM-LUR**: Hybrid Generalized Additive Model–State Space Model with Land Use Regression (requires [gam_ssm_lur](https://github.com/GabrielOduori/gam_ssm_lur))
-- **FusionSVGP**: Multi-source Sparse Variational GP for sensor fusion (requires [fusionGP2](https://github.com/GabrielOduori/fusionGP2))
+- **FusionSVGP**: Multi-source Sparse Variational GP for sensor fusion (requires [fusiongp](https://github.com/GabrielOduori/fusiongp))
 
 ## Project Structure
 
@@ -104,6 +104,61 @@ python -m experiments.demo_fusion_gp_transfer
 ```
 
 Results are saved to `results/figures/`.
+
+### Reproduce Thesis Results
+
+#### Option 1: Use Saved Synthetic Data (Recommended)
+
+```bash
+# Demo: Run transfer learning with saved synthetic data
+python experiments/run_transfer_with_saved_data.py
+
+# This script demonstrates:
+# - Loading saved synthetic data from data/synthetic_target/target_data_seed42.npz
+# - Training baseline GP (no transfer, λ=0.0)
+# - Simulating Prior Tempering transfer (λ=0.3, 0.5, 0.7, 1.0)
+# - Computing RMSE, MAE, R² metrics
+
+# Verify saved data reproducibility
+python scripts/verify_synthetic_data.py
+```
+
+#### Option 2: Full Experiment with Real Source Models
+
+```bash
+# Core experiment producing ALL thesis results
+python experiments/run_model_transfer_experiments.py
+
+# This script:
+# 1. Loads pre-trained source models (FusionGP, GAM-SSM-LUR)
+# 2. Generates/loads synthetic target data (seed=42)
+# 3. Runs Prior Tempering and OBTL transfer
+# 4. Creates publication-quality visualizations (seaborn)
+# 5. Saves results and figures
+
+# Outputs (organized in single experiment folder):
+# results/experiment_TIMESTAMP/
+#   ├── results.json                          # All results (JSON)
+#   ├── tables/                               # Results tables (CSV + LaTeX)
+#   │   ├── prior_tempering_results.csv
+#   │   ├── prior_tempering_results.tex
+#   │   ├── obtl_results.csv
+#   │   ├── obtl_results.tex
+#   │   ├── summary_best_results.csv
+#   │   └── summary_best_results.tex
+#   └── figures/                              # Publication-quality plots
+#       ├── prior_tempering_fancy_*.png
+#       ├── obtl_fancy_*.png
+#       └── summary_heatmap_*.png
+# data/synthetic_target/target_data_seed42.npz (saved for reproducibility)
+```
+
+**Data Availability**:
+- **Synthetic Target Data**: [`data/synthetic_target/target_data_seed42.npz`](data/synthetic_target/target_data_seed42.npz) (4.8 KB, seed=42, 50 train + 100 test samples)
+- **Results JSON**: [`results/real_model_transfer/real_transfer_20251225_193157.json`](results/real_model_transfer/real_transfer_20251225_193157.json)
+- **Source Models**: Not publicly available (trained on proprietary Dublin air quality data)
+
+**Note**: `run_transfer_with_saved_data.py` uses simplified simulation since real source models are not publicly available. For exact thesis results matching [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md), the full source models are required.
 
 ### 1. Baseline (No Transfer)
 ```python
