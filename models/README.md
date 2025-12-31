@@ -174,7 +174,7 @@ with open('models/fusiongp/dublin/fusiongp_dublin_metadata.json', 'w') as f:
 2. **Transfer to target** (Cork):
    ```bash
    # Load Dublin models and transfer to Cork
-   python experiments/run_real_model_transfer.py
+   python experiments/run_model_transfer_experiments.py
    # Uses models from models/{fusiongp,gam_ssm_lur}/dublin/
    # Generates Cork predictions
    ```
